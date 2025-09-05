@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { getDb } = require('../database');
+const { dbGet, dbRun } = require('../database');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -15,15 +15,8 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    const db = getDb();
-    
     // Get user from database
-    const user = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    const user = await dbGet('SELECT * FROM users WHERE username = ?', [username]);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -74,15 +67,9 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
-    const db = getDb();
 
     // Check if user already exists
-    const existingUser = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    const existingUser = await dbGet('SELECT * FROM users WHERE username = ?', [username]);
 
     if (existingUser) {
       return res.status(409).json({ error: 'Username already exists' });
@@ -92,28 +79,25 @@ router.post('/register', async (req, res) => {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+    // Generate user ID
+    const userId = 'user-' + Date.now();
+
     // Insert new user
-    const result = await new Promise((resolve, reject) => {
-      db.run(
-        'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-        [username, hashedPassword, role],
-        function(err) {
-          if (err) reject(err);
-          else resolve({ id: this.lastID });
-        }
-      );
-    });
+    await dbRun(
+      'INSERT INTO users (id, username, password, role) VALUES (?, ?, ?, ?)',
+      [userId, username, hashedPassword, role]
+    );
 
     // Generate JWT token
     const token = jwt.sign(
-      { userId: result.id, username, role },
+      { userId: userId, username, role },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     // Return user data and token
     const userData = {
-      id: result.id,
+      id: userId,
       username,
       role,
       createdAt: new Date().toISOString()

@@ -25,7 +25,23 @@ function App() {
   const handleLogin = async (credentials: { username: string; password: string }) => {
     try {
       setError('');
-      const response = await apiService.login(credentials.username, credentials.password);
+      
+      // Try login first
+      let response;
+      try {
+        response = await apiService.login(credentials.username, credentials.password);
+      } catch (loginError) {
+        // If login fails, try to register the user
+        if (loginError instanceof Error && loginError.message.includes('Invalid credentials')) {
+          try {
+            response = await apiService.register(credentials.username, credentials.password);
+          } catch (registerError) {
+            throw loginError; // Throw original login error if register also fails
+          }
+        } else {
+          throw loginError;
+        }
+      }
       
       setUser(response.user);
       localStorage.setItem('user', JSON.stringify(response.user));

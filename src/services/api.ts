@@ -53,6 +53,11 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ username, password, role }),
     });
+    
+    if (response.token) {
+      this.setToken(response.token);
+    }
+    
   }
 
   // Train endpoints
